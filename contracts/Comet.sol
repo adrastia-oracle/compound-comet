@@ -4,6 +4,7 @@ pragma solidity 0.8.15;
 import "./CometMainInterface.sol";
 import "./ERC20.sol";
 import "./IPriceFeed.sol";
+import "./vendor/adrastia/prudentia/IHistoricalRates.sol";
 
 /**
  * @title Compound's Comet Contract
@@ -99,6 +100,14 @@ contract Comet is CometMainInterface {
 
     /// @notice Factor to divide by when accruing rewards in order to preserve 6 decimals (i.e. baseScale / 1e6)
     uint internal immutable accrualDescaleFactor;
+
+    /// @notice The address of the Adrastia Prudentia supply cap controller.
+    /// @dev If this is address(0), then we're using the native supply caps.
+    address internal immutable supplyCapController;
+
+    /// @notice The offset of the Adrastia Prudentia supply cap, used for delayed rate activation.
+    /// @dev The offset corresponds to the number of update cycles that the supply cap is delayed.
+    uint8 internal immutable supplyCapOffset;
 
     /** Collateral asset configuration (packed) **/
 
@@ -199,6 +208,10 @@ contract Comet is CometMainInterface {
         (asset12_a, asset12_b) = getPackedAssetInternal(config.assetConfigs, 12);
         (asset13_a, asset13_b) = getPackedAssetInternal(config.assetConfigs, 13);
         (asset14_a, asset14_b) = getPackedAssetInternal(config.assetConfigs, 14);
+
+        // Setup Adrastia Prudentia supply cap config
+        supplyCapController = config.supplyCapConfig.controller;
+        supplyCapOffset = config.supplyCapConfig.offset;
     }
 
     /**
@@ -341,7 +354,18 @@ contract Comet is CometMainInterface {
         address priceFeed = address(uint160(word_b & type(uint160).max));
         uint8 decimals_ = uint8(((word_b >> 160) & type(uint8).max));
         uint64 scale = uint64(10 ** decimals_);
-        uint128 supplyCap = uint128(((word_b >> 168) & type(uint64).max) * scale);
+        uint128 supplyCap;
+        
+        // Check if we're using Adrastia Prudentia for the supply cap
+        if (supplyCapController != address(0)) {
+            // We have a controller, so we're using Adrastia Prudentia
+
+            // Get the supply cap from Adrastia Prudentia
+            supplyCap = uint128(IHistoricalRates(supplyCapController).getRateAt(asset, supplyCapOffset).current) * scale;
+        } else {
+            // We're not using Adrastia Prudentia, so use the native supply cap
+            supplyCap = uint128(((word_b >> 168) & type(uint64).max) * scale);
+        }
 
         return AssetInfo({
             offset: i,
@@ -1306,6 +1330,18 @@ contract Comet is CometMainInterface {
         (, uint64 baseBorrowIndex_) = accruedInterestIndices(getNowInternal() - lastAccrualTime);
         int104 principal = userBasic[account].principal;
         return principal < 0 ? presentValueBorrow(baseBorrowIndex_, unsigned104(-principal)) : 0;
+    }
+
+    /**
+     * @notice Retrieves the Adrastia Prudentia supply cap config, if any.
+     * @dev If the controller address is zero, then native supply caps are used.
+     * @return The supply cap config.
+     */
+    function supplyCapConfig() override external view returns(PrudentiaConfig memory) {
+        return PrudentiaConfig({
+            controller: supplyCapController,
+            offset: supplyCapOffset
+        });
     }
 
     /**
