@@ -25,9 +25,12 @@ import mainnetRelationConfigMap from './deployments/mainnet/usdc/relations';
 import mainnetWethRelationConfigMap from './deployments/mainnet/weth/relations';
 import polygonRelationConfigMap from './deployments/polygon/usdc/relations';
 import arbitrumRelationConfigMap from './deployments/arbitrum/usdc/relations';
-import arbitrumGoerliRelationConfigMap from './deployments/arbitrum-goerli/usdc/relations';
+import arbitrumBridgedUsdcGoerliRelationConfigMap from './deployments/arbitrum-goerli/usdc.e/relations';
+import arbitrumGoerliNativeUsdcRelationConfigMap from './deployments/arbitrum-goerli/usdc/relations';
 import baseGoerliRelationConfigMap from './deployments/base-goerli/usdc/relations';
 import baseGoerliWethRelationConfigMap from './deployments/base-goerli/weth/relations';
+import lineaGoerliRelationConfigMap from './deployments/linea-goerli/usdc/relations';
+
 
 task('accounts', 'Prints the list of accounts', async (taskArgs, hre) => {
   for (const account of await hre.ethers.getSigners()) console.log(account.address);
@@ -41,6 +44,7 @@ const {
   SNOWTRACE_KEY,
   POLYGONSCAN_KEY,
   ARBISCAN_KEY,
+  LINEASCAN_KEY,
   INFURA_KEY,
   MNEMONIC = 'myth like bonus scare over problem client lizard pioneer submit female collect',
   REPORT_GAS = 'false',
@@ -69,7 +73,8 @@ export function requireEnv(varName, msg?: string): string {
   'SNOWTRACE_KEY',
   'INFURA_KEY',
   'POLYGONSCAN_KEY',
-  'ARBISCAN_KEY'
+  'ARBISCAN_KEY',
+  'LINEASCAN_KEY'
 ].map(v => requireEnv(v));
 
 // Networks
@@ -86,7 +91,6 @@ const networkConfigs: NetworkConfig[] = [
   { network: 'ropsten', chainId: 3 },
   { network: 'rinkeby', chainId: 4 },
   { network: 'goerli', chainId: 5 },
-  { network: 'kovan', chainId: 42 },
   {
     network: 'polygon',
     chainId: 137,
@@ -121,6 +125,11 @@ const networkConfigs: NetworkConfig[] = [
     network: 'base-goerli',
     chainId: 84531,
     url: `https://goerli.base.org/`,
+  },
+  {
+    network: 'linea-goerli',
+    chainId: 59140,
+    url: `https://linea-goerli.infura.io/v3/${INFURA_KEY}`,
   },
 ];
 
@@ -195,7 +204,6 @@ const config: HardhatUserConfig = {
       ropsten: ETHERSCAN_KEY,
       rinkeby: ETHERSCAN_KEY,
       goerli: ETHERSCAN_KEY,
-      kovan: ETHERSCAN_KEY,
       // Avalanche
       avalanche: SNOWTRACE_KEY,
       avalancheFujiTestnet: SNOWTRACE_KEY,
@@ -209,6 +217,8 @@ const config: HardhatUserConfig = {
       'arbitrum-goerli': ARBISCAN_KEY,
       // Base
       'base-goerli': ETHERSCAN_KEY,
+      // Linea
+      'linea-goerli': LINEASCAN_KEY,
     },
     customChains: [
       {
@@ -236,6 +246,14 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL: 'https://api-goerli.basescan.org/api',
           browserURL: 'https://api-goerli.basescan.org/'
+        }
+      },
+      {
+        network: 'linea-goerli',
+        chainId: 59140,
+        urls: {
+          apiURL: 'https://api-goerli.lineascan.build/api',
+          browserURL: 'https://goerli.lineascan.build/'
         }
       }
     ]
@@ -267,11 +285,15 @@ const config: HardhatUserConfig = {
         usdc: arbitrumRelationConfigMap
       },
       'arbitrum-goerli': {
-        usdc: arbitrumGoerliRelationConfigMap
+        'usdc.e': arbitrumBridgedUsdcGoerliRelationConfigMap, 
+        usdc: arbitrumGoerliNativeUsdcRelationConfigMap
       },
       'base-goerli': {
         usdc: baseGoerliRelationConfigMap,
         weth: baseGoerliWethRelationConfigMap
+      },
+      'linea-goerli': {
+        usdc: lineaGoerliRelationConfigMap
       }
     },
   },
@@ -298,11 +320,6 @@ const config: HardhatUserConfig = {
         name: 'fuji',
         network: 'fuji',
         deployment: 'usdc'
-      },
-      {
-        name: 'kovan',
-        network: 'kovan',
-        deployment: 'usdc',
       },
       {
         name: 'goerli',
@@ -333,7 +350,13 @@ const config: HardhatUserConfig = {
         auxiliaryBase: 'mainnet'
       },
       {
-        name: 'arbitrum-goerli',
+        name: 'arbitrum-goerli-usdc.e',
+        network: 'arbitrum-goerli',
+        deployment: 'usdc.e',
+        auxiliaryBase: 'goerli'
+      },
+      {
+        name: 'arbitrum-goerli-usdc',
         network: 'arbitrum-goerli',
         deployment: 'usdc',
         auxiliaryBase: 'goerli'
@@ -348,6 +371,12 @@ const config: HardhatUserConfig = {
         name: 'base-goerli-weth',
         network: 'base-goerli',
         deployment: 'weth',
+        auxiliaryBase: 'goerli'
+      },
+      {
+        name: 'linea-goerli',
+        network: 'linea-goerli',
+        deployment: 'usdc',
         auxiliaryBase: 'goerli'
       }
     ],

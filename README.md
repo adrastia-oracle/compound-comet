@@ -232,11 +232,16 @@ These simulations are extremely useful for testing deployments before actually c
 
 #### Deploy Workflow
 
-0. Create the deployment script and configuration file, and test locally
-1. Open a PR containing the new deployment directory files
-2. Trigger the `deploy-market` workflow action through the GitHub UI
-3. Inspect the new `roots.json` which the workflow automatically commited to your PR
-4. Start using the new protocol deployment and/or create further migrations to modify it
+1. Create the deployment script and configuration file, and test locally
+2. Open a PR containing the new deployment directory files
+3. Trigger the `deploy-market` workflow action through the GitHub UI
+4. Inspect the new `roots.json` which the workflow automatically commited to your PR
+5. Start using the new protocol deployment and/or create further migrations to modify it
+
+##### Deploy Script Gotchas and Tips
+
+- If the deploy script is for a new market on a chain with an existing market, make sure to call 'setFactory(address,address)' in the initialization migration script.
+(TODO: Scenarios will fail prior to running the migration script because the factory will not be set during deployment, will need to figure out a better way)
 
 ##### Verifying Deployments
 
@@ -253,7 +258,7 @@ This can also be used together with `--overwrite`, to produce the verification a
 #### Other considerations
 
 Make sure that the deploying address has a sufficient amount of the chain's
-native asset (i.e. 2 ETH for Kovan, 2 AVAX for Fuji)
+native asset (i.e. 2 ETH for Goerli, 2 AVAX for Fuji)
 
 ### Clone Multisig
 
@@ -272,7 +277,7 @@ Uniswap for a profit.
 To run the bot, you'll need the address of a deployed version of the Liquidator
 contract (or you can deploy a new instance of it yourself):
 
-`LIQUIDATOR_ADDRESS="0xABC..." DEPLOYMENT="usdc" yarn liquidation-bot --network kovan`
+`LIQUIDATOR_ADDRESS="0xABC..." DEPLOYMENT="usdc" yarn liquidation-bot --network goerli`
 
 Initiating transactions this way via the public mempool will
 [almost certainly get frontrun](https://youtu.be/UZ-NNd6yjFM), but you might be
