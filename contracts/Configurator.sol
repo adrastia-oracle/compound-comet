@@ -18,14 +18,7 @@ contract Configurator is ConfiguratorStorage {
     event SetPauseGuardian(address indexed cometProxy, address indexed oldPauseGuardian, address indexed newPauseGuardian);
     event SetBaseTokenPriceFeed(address indexed cometProxy, address indexed oldBaseTokenPriceFeed, address indexed newBaseTokenPriceFeed);
     event SetExtensionDelegate(address indexed cometProxy, address indexed oldExt, address indexed newExt);
-    event SetSupplyKink(address indexed cometProxy,uint64 oldKink, uint64 newKink);
-    event SetSupplyPerYearInterestRateSlopeLow(address indexed cometProxy,uint64 oldIRSlopeLow, uint64 newIRSlopeLow);
-    event SetSupplyPerYearInterestRateSlopeHigh(address indexed cometProxy,uint64 oldIRSlopeHigh, uint64 newIRSlopeHigh);
-    event SetSupplyPerYearInterestRateBase(address indexed cometProxy,uint64 oldIRBase, uint64 newIRBase);
-    event SetBorrowKink(address indexed cometProxy,uint64 oldKink, uint64 newKink);
-    event SetBorrowPerYearInterestRateSlopeLow(address indexed cometProxy,uint64 oldIRSlopeLow, uint64 newIRSlopeLow);
-    event SetBorrowPerYearInterestRateSlopeHigh(address indexed cometProxy,uint64 oldIRSlopeHigh, uint64 newIRSlopeHigh);
-    event SetBorrowPerYearInterestRateBase(address indexed cometProxy,uint64 oldIRBase, uint64 newIRBase);
+    event SetConfigExt(address indexed cometProxy, address indexed oldConfigExt, address indexed newConfigExt);
     event SetStoreFrontPriceFactor(address indexed cometProxy, uint64 oldStoreFrontPriceFactor, uint64 newStoreFrontPriceFactor);
     event SetBaseTrackingSupplySpeed(address indexed cometProxy, uint64 oldBaseTrackingSupplySpeed, uint64 newBaseTrackingSupplySpeed);
     event SetBaseTrackingBorrowSpeed(address indexed cometProxy, uint64 oldBaseTrackingBorrowSpeed, uint64 newBaseTrackingBorrowSpeed);
@@ -129,68 +122,12 @@ contract Configurator is ConfiguratorStorage {
         emit SetExtensionDelegate(cometProxy, oldExtensionDelegate, newExtensionDelegate);
     }
 
-    function setSupplyKink(address cometProxy, uint64 newSupplyKink) external {
+    function setConfigExt(address cometProxy, address newConfigExt) external {
         if (msg.sender != governor) revert Unauthorized();
 
-        uint64 oldSupplyKink = configuratorParams[cometProxy].supplyKink;
-        configuratorParams[cometProxy].supplyKink = newSupplyKink;
-        emit SetSupplyKink(cometProxy, oldSupplyKink, newSupplyKink);
-    }
-
-    function setSupplyPerYearInterestRateSlopeLow(address cometProxy, uint64 newSlope) external {
-        if (msg.sender != governor) revert Unauthorized();
-
-        uint64 oldSlope = configuratorParams[cometProxy].supplyPerYearInterestRateSlopeLow;
-        configuratorParams[cometProxy].supplyPerYearInterestRateSlopeLow = newSlope;
-        emit SetSupplyPerYearInterestRateSlopeLow(cometProxy, oldSlope, newSlope);
-    }
-
-    function setSupplyPerYearInterestRateSlopeHigh(address cometProxy, uint64 newSlope) external {
-        if (msg.sender != governor) revert Unauthorized();
-
-        uint64 oldSlope = configuratorParams[cometProxy].supplyPerYearInterestRateSlopeHigh;
-        configuratorParams[cometProxy].supplyPerYearInterestRateSlopeHigh = newSlope;
-        emit SetSupplyPerYearInterestRateSlopeHigh(cometProxy, oldSlope, newSlope);
-    }
-
-    function setSupplyPerYearInterestRateBase(address cometProxy, uint64 newBase) external {
-        if (msg.sender != governor) revert Unauthorized();
-
-        uint64 oldBase = configuratorParams[cometProxy].supplyPerYearInterestRateBase;
-        configuratorParams[cometProxy].supplyPerYearInterestRateBase = newBase;
-        emit SetSupplyPerYearInterestRateBase(cometProxy, oldBase, newBase);
-    }
-
-    function setBorrowKink(address cometProxy, uint64 newBorrowKink) external {
-        if (msg.sender != governor) revert Unauthorized();
-
-        uint64 oldBorrowKink = configuratorParams[cometProxy].borrowKink;
-        configuratorParams[cometProxy].borrowKink = newBorrowKink;
-        emit SetBorrowKink(cometProxy, oldBorrowKink, newBorrowKink);
-    }
-
-    function setBorrowPerYearInterestRateSlopeLow(address cometProxy, uint64 newSlope) external {
-        if (msg.sender != governor) revert Unauthorized();
-
-        uint64 oldSlope = configuratorParams[cometProxy].borrowPerYearInterestRateSlopeLow;
-        configuratorParams[cometProxy].borrowPerYearInterestRateSlopeLow = newSlope;
-        emit SetBorrowPerYearInterestRateSlopeLow(cometProxy, oldSlope, newSlope);
-    }
-
-    function setBorrowPerYearInterestRateSlopeHigh(address cometProxy, uint64 newSlope) external {
-        if (msg.sender != governor) revert Unauthorized();
-
-        uint64 oldSlope = configuratorParams[cometProxy].borrowPerYearInterestRateSlopeHigh;
-        configuratorParams[cometProxy].borrowPerYearInterestRateSlopeHigh = newSlope;
-        emit SetBorrowPerYearInterestRateSlopeHigh(cometProxy, oldSlope, newSlope);
-    }
-
-    function setBorrowPerYearInterestRateBase(address cometProxy, uint64 newBase) external {
-        if (msg.sender != governor) revert Unauthorized();
-
-        uint64 oldBase = configuratorParams[cometProxy].borrowPerYearInterestRateBase;
-        configuratorParams[cometProxy].borrowPerYearInterestRateBase = newBase;
-        emit SetBorrowPerYearInterestRateBase(cometProxy, oldBase, newBase);
+        address oldConfigExt = configuratorParams[cometProxy].configExt;
+        configuratorParams[cometProxy].configExt = newConfigExt;
+        emit SetConfigExt(cometProxy, oldConfigExt, newConfigExt);
     }
 
     function setStoreFrontPriceFactor(address cometProxy, uint64 newStoreFrontPriceFactor) external {

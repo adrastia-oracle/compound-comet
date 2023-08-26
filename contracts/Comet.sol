@@ -4,6 +4,7 @@ pragma solidity 0.8.15;
 import "./CometMainInterface.sol";
 import "./ERC20.sol";
 import "./IPriceFeed.sol";
+import "./ICometConfigExt.sol";
 
 /**
  * @title Compound's Comet Contract
@@ -28,37 +29,8 @@ contract Comet is CometMainInterface {
     /// @notice The address of the extension contract delegate
     address public override immutable extensionDelegate;
 
-    /// @notice The point in the supply rates separating the low interest rate slope and the high interest rate slope (factor)
-    /// @dev uint64
-    uint public override immutable supplyKink;
-
-    /// @notice Per second supply interest rate slope applied when utilization is below kink (factor)
-    /// @dev uint64
-    uint public override immutable supplyPerSecondInterestRateSlopeLow;
-
-    /// @notice Per second supply interest rate slope applied when utilization is above kink (factor)
-    /// @dev uint64
-    uint public override immutable supplyPerSecondInterestRateSlopeHigh;
-
-    /// @notice Per second supply base interest rate (factor)
-    /// @dev uint64
-    uint public override immutable supplyPerSecondInterestRateBase;
-
-    /// @notice The point in the borrow rate separating the low interest rate slope and the high interest rate slope (factor)
-    /// @dev uint64
-    uint public override immutable borrowKink;
-
-    /// @notice Per second borrow interest rate slope applied when utilization is below kink (factor)
-    /// @dev uint64
-    uint public override immutable borrowPerSecondInterestRateSlopeLow;
-
-    /// @notice Per second borrow interest rate slope applied when utilization is above kink (factor)
-    /// @dev uint64
-    uint public override immutable borrowPerSecondInterestRateSlopeHigh;
-
-    /// @notice Per second borrow base interest rate (factor)
-    /// @dev uint64
-    uint public override immutable borrowPerSecondInterestRateBase;
+    /// @notice The address of the extended configuration contract
+    address public override immutable configExt;
 
     /// @notice The fraction of the liquidation penalty that goes to buyers of collateral instead of the protocol
     /// @dev uint64
@@ -169,17 +141,8 @@ contract Comet is CometMainInterface {
             targetReserves = config.targetReserves;
         }
 
-        // Set interest rate model configs
-        unchecked {
-            supplyKink = config.supplyKink;
-            supplyPerSecondInterestRateSlopeLow = config.supplyPerYearInterestRateSlopeLow / SECONDS_PER_YEAR;
-            supplyPerSecondInterestRateSlopeHigh = config.supplyPerYearInterestRateSlopeHigh / SECONDS_PER_YEAR;
-            supplyPerSecondInterestRateBase = config.supplyPerYearInterestRateBase / SECONDS_PER_YEAR;
-            borrowKink = config.borrowKink;
-            borrowPerSecondInterestRateSlopeLow = config.borrowPerYearInterestRateSlopeLow / SECONDS_PER_YEAR;
-            borrowPerSecondInterestRateSlopeHigh = config.borrowPerYearInterestRateSlopeHigh / SECONDS_PER_YEAR;
-            borrowPerSecondInterestRateBase = config.borrowPerYearInterestRateBase / SECONDS_PER_YEAR;
-        }
+        // Set extension config
+        configExt = config.configExt;
 
         // Set asset info
         numAssets = uint8(config.assetConfigs.length);
@@ -427,6 +390,8 @@ contract Comet is CometMainInterface {
      * @return The per second supply rate at `utilization`
      */
     function getSupplyRate(uint utilization) override public view returns (uint64) {
+        (uint256 supplyKink, uint256 supplyPerSecondInterestRateSlopeLow, uint256 supplyPerSecondInterestRateSlopeHigh, uint256 supplyPerSecondInterestRateBase) = ICometConfigExt(configExt).supplyRateConfig();
+
         if (utilization <= supplyKink) {
             // interestRateBase + interestRateSlopeLow * utilization
             return safe64(supplyPerSecondInterestRateBase + mulFactor(supplyPerSecondInterestRateSlopeLow, utilization));
@@ -442,6 +407,8 @@ contract Comet is CometMainInterface {
      * @return The per second borrow rate at `utilization`
      */
     function getBorrowRate(uint utilization) override public view returns (uint64) {
+        (uint256 borrowKink, uint256 borrowPerSecondInterestRateSlopeLow, uint256 borrowPerSecondInterestRateSlopeHigh, uint256 borrowPerSecondInterestRateBase) = ICometConfigExt(configExt).borrowRateConfig();
+
         if (utilization <= borrowKink) {
             // interestRateBase + interestRateSlopeLow * utilization
             return safe64(borrowPerSecondInterestRateBase + mulFactor(borrowPerSecondInterestRateSlopeLow, utilization));
