@@ -1,8 +1,9 @@
-import { annualize, defactor, defaultAssets, ethers, event, exp, expect, factor, makeConfigurator, Numeric, truncateDecimals, wait } from './helpers';
+import { annualize, defactor, defaultAssets, ethers, event, exp, expect, factor, makeConfigurator, makeProtocolConfigExt, Numeric, ProtocolOpts, truncateDecimals, wait } from './helpers';
 import { CometModifiedFactory__factory, SimplePriceFeed__factory, SimpleTimelock__factory } from '../build/types';
 import { AssetInfoStructOutput } from '../build/types/CometHarnessInterface';
-import { ConfigurationStructOutput } from '../build/types/Configurator';
+import { ConfigurationStructOutput, Configurator } from '../build/types/Configurator';
 import { BigNumber } from 'ethers';
+import { CometConfigExt } from '../build/types/CometConfigExt';
 
 type ConfiguratorAssetConfig = {
   asset: string;
@@ -33,14 +34,7 @@ function convertToEventConfiguration(configuration: ConfigurationStructOutput) {
     configuration.baseToken,
     configuration.baseTokenPriceFeed,
     configuration.extensionDelegate,
-    configuration.supplyKink.toBigInt(),
-    configuration.supplyPerYearInterestRateSlopeLow.toBigInt(),
-    configuration.supplyPerYearInterestRateSlopeHigh.toBigInt(),
-    configuration.supplyPerYearInterestRateBase.toBigInt(),
-    configuration.borrowKink.toBigInt(),
-    configuration.borrowPerYearInterestRateSlopeLow.toBigInt(),
-    configuration.borrowPerYearInterestRateSlopeHigh.toBigInt(),
-    configuration.borrowPerYearInterestRateBase.toBigInt(),
+    configuration.configExt,
     configuration.storeFrontPriceFactor.toBigInt(),
     configuration.trackingIndexScale.toBigInt(),
     configuration.baseTrackingSupplySpeed.toBigInt(),
@@ -351,208 +345,277 @@ describe('configurator', function () {
       expect(await cometAsProxy.extensionDelegate()).to.be.equal(newExt);
     });
 
+    async function setConfigExt(configuratorAsProxy: Configurator, cometAddress: string, protocolOpts: ProtocolOpts) {
+      const configExt = await makeProtocolConfigExt(protocolOpts);
+
+      return {
+        txn: await wait(configuratorAsProxy.setConfigExt(cometAddress, configExt.address)),
+        newConfigExt: configExt as CometConfigExt,
+      };
+    }
+
     it('sets supplyKink and deploys Comet with new configuration', async () => {
-      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy } = await makeConfigurator();
+      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy, configExt } = await makeConfigurator();
 
       const cometAsProxy = comet.attach(cometProxy.address);
       const configuratorAsProxy = configurator.attach(configuratorProxy.address);
-      expect((await configuratorAsProxy.getConfiguration(cometProxy.address)).supplyKink).to.be.equal(await comet.supplyKink());
+      const configuratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
 
-      const oldKink = (await comet.supplyKink()).toBigInt();
+      const configExtAsProxy = configExt.attach(configuratorAsProxyConfig.configExt);
+      expect(await configExtAsProxy.supplyKink()).to.be.equal(await configExt.supplyKink());
+
+      const oldKink = (await configExt.supplyKink()).toBigInt();
       const newKink = 100n;
-      const txn = await wait(configuratorAsProxy.setSupplyKink(cometProxy.address, newKink));
+      const { txn, newConfigExt } = await setConfigExt(configuratorAsProxy, cometProxy.address, {
+        supplyKink: newKink,
+      });
       await wait(proxyAdmin.deployAndUpgradeTo(configuratorProxy.address, cometProxy.address));
 
       expect(event(txn, 0)).to.be.deep.equal({
-        SetSupplyKink: {
+        SetConfigExt: {
           cometProxy: cometProxy.address,
-          oldKink,
-          newKink,
+          oldConfigExt: configuratorAsProxyConfig.configExt,
+          newConfigExt: newConfigExt.address,
         }
       });
       expect(oldKink).to.be.not.equal(newKink);
-      expect((await configuratorAsProxy.getConfiguration(cometProxy.address)).supplyKink).to.be.equal(newKink);
-      expect(await cometAsProxy.supplyKink()).to.be.equal(newKink);
+      const newConfiguratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
+      const newConfigExtAsProxy = configExt.attach(newConfiguratorAsProxyConfig.configExt);
+      expect(await newConfigExtAsProxy.supplyKink()).to.be.equal(newKink);
+      const cometAsProxyConfigExtAddress = await cometAsProxy.configExt();
+      const cometAsProxyConfigExt = configExt.attach(cometAsProxyConfigExtAddress);
+      expect(await cometAsProxyConfigExt.supplyKink()).to.be.equal(newKink);
     });
 
-    it('sets supplyPerYearInterestRateSlopeLow and deploys Comet with new configuration', async () => {
-      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy } = await makeConfigurator();
+    it('sets supplyPerYearInterestRateSlopeLow and deploys Comet with new configuration', async function() {
+      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy, configExt } = await makeConfigurator();
 
       const cometAsProxy = comet.attach(cometProxy.address);
       const configuratorAsProxy = configurator.attach(configuratorProxy.address);
-      expect(defactor((await configuratorAsProxy.getConfiguration(cometProxy.address)).supplyPerYearInterestRateSlopeLow))
-        .to.be.approximately(annualize(await comet.supplyPerSecondInterestRateSlopeLow()), 0.00001);
+      const configuratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
 
-      const oldIRSlopeLow = (await configuratorAsProxy.getConfiguration(cometProxy.address)).supplyPerYearInterestRateSlopeLow.toBigInt();
+      const configExtAsProxy = configExt.attach(configuratorAsProxyConfig.configExt);
+      expect(await configExtAsProxy.supplyPerSecondInterestRateSlopeLow()).to.be.equal(await configExt.supplyPerSecondInterestRateSlopeLow());
+
+      const oldIRSlopeLow = (await configExt.supplyPerSecondInterestRateSlopeLow()).toBigInt();
       const newIRSlopeLow = exp(5.5, 18);
-      const txn = await wait(configuratorAsProxy.setSupplyPerYearInterestRateSlopeLow(cometProxy.address, newIRSlopeLow));
+      const { txn, newConfigExt } = await setConfigExt(configuratorAsProxy, cometProxy.address, {
+        supplyInterestRateSlopeLow: newIRSlopeLow,
+      });
       await wait(proxyAdmin.deployAndUpgradeTo(configuratorProxy.address, cometProxy.address));
 
       expect(event(txn, 0)).to.be.deep.equal({
-        SetSupplyPerYearInterestRateSlopeLow: {
+        SetConfigExt: {
           cometProxy: cometProxy.address,
-          oldIRSlopeLow,
-          newIRSlopeLow,
+          oldConfigExt: configuratorAsProxyConfig.configExt,
+          newConfigExt: newConfigExt.address,
         }
       });
       expect(oldIRSlopeLow).to.be.not.equal(newIRSlopeLow);
-      expect((await configuratorAsProxy.getConfiguration(cometProxy.address)).supplyPerYearInterestRateSlopeLow).to.be.equal(newIRSlopeLow);
-      expect(annualize(await cometAsProxy.supplyPerSecondInterestRateSlopeLow()))
-        .to.be.approximately(defactor(newIRSlopeLow), 0.00001);
+      const newConfiguratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
+      const newConfigExtAsProxy = configExt.attach(newConfiguratorAsProxyConfig.configExt);
+      expect(annualize(await newConfigExtAsProxy.supplyPerSecondInterestRateSlopeLow())).to.be.approximately(defactor(newIRSlopeLow), 0.00001);
+      const cometAsProxyConfigExtAddress = await cometAsProxy.configExt();
+      const cometAsProxyConfigExt = configExt.attach(cometAsProxyConfigExtAddress);
+      expect(annualize(await cometAsProxyConfigExt.supplyPerSecondInterestRateSlopeLow())).to.be.approximately(defactor(newIRSlopeLow), 0.00001);
     });
 
-    it('sets supplyPerYearInterestRateSlopeHigh and deploys Comet with new configuration', async () => {
-      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy } = await makeConfigurator();
+    it('sets supplyPerYearInterestRateSlopeHigh and deploys Comet with new configuration', async function() {
+      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy, configExt } = await makeConfigurator();
 
       const cometAsProxy = comet.attach(cometProxy.address);
       const configuratorAsProxy = configurator.attach(configuratorProxy.address);
-      expect(defactor((await configuratorAsProxy.getConfiguration(cometProxy.address)).supplyPerYearInterestRateSlopeHigh))
-        .to.be.approximately(annualize(await comet.supplyPerSecondInterestRateSlopeHigh()), 0.00001);
+      const configuratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
 
-      const oldIRSlopeHigh = (await configuratorAsProxy.getConfiguration(cometProxy.address)).supplyPerYearInterestRateSlopeHigh.toBigInt();
+      const configExtAsProxy = configExt.attach(configuratorAsProxyConfig.configExt);
+      expect(await configExtAsProxy.supplyPerSecondInterestRateSlopeHigh()).to.be.equal(await configExt.supplyPerSecondInterestRateSlopeHigh());
+
+      const oldIRSlopeHigh = (await configExt.supplyPerSecondInterestRateSlopeHigh()).toBigInt();
       const newIRSlopeHigh = exp(5.5, 18);
-      const txn = await wait(configuratorAsProxy.setSupplyPerYearInterestRateSlopeHigh(cometProxy.address, newIRSlopeHigh));
+      const { txn, newConfigExt } = await setConfigExt(configuratorAsProxy, cometProxy.address, {
+        supplyInterestRateSlopeHigh: newIRSlopeHigh,
+      });
       await wait(proxyAdmin.deployAndUpgradeTo(configuratorProxy.address, cometProxy.address));
 
       expect(event(txn, 0)).to.be.deep.equal({
-        SetSupplyPerYearInterestRateSlopeHigh: {
+        SetConfigExt: {
           cometProxy: cometProxy.address,
-          oldIRSlopeHigh,
-          newIRSlopeHigh,
+          oldConfigExt: configuratorAsProxyConfig.configExt,
+          newConfigExt: newConfigExt.address,
         }
       });
       expect(oldIRSlopeHigh).to.be.not.equal(newIRSlopeHigh);
-      expect((await configuratorAsProxy.getConfiguration(cometProxy.address)).supplyPerYearInterestRateSlopeHigh).to.be.equal(newIRSlopeHigh);
-      expect(annualize(await cometAsProxy.supplyPerSecondInterestRateSlopeHigh()))
-        .to.be.approximately(defactor(newIRSlopeHigh), 0.00001);
+      const newConfiguratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
+      const newConfigExtAsProxy = configExt.attach(newConfiguratorAsProxyConfig.configExt);
+      expect(annualize(await newConfigExtAsProxy.supplyPerSecondInterestRateSlopeHigh())).to.be.approximately(defactor(newIRSlopeHigh), 0.00001);
+      const cometAsProxyConfigExtAddress = await cometAsProxy.configExt();
+      const cometAsProxyConfigExt = configExt.attach(cometAsProxyConfigExtAddress);
+      expect(annualize(await cometAsProxyConfigExt.supplyPerSecondInterestRateSlopeHigh())).to.be.approximately(defactor(newIRSlopeHigh), 0.00001);
     });
 
-    it('sets supplyPerYearInterestRateBase and deploys Comet with new configuration', async () => {
-      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy } = await makeConfigurator();
+    it('sets supplyPerYearInterestRateBase and deploys Comet with new configuration', async function() {
+      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy, configExt } = await makeConfigurator();
 
       const cometAsProxy = comet.attach(cometProxy.address);
       const configuratorAsProxy = configurator.attach(configuratorProxy.address);
-      expect(defactor((await configuratorAsProxy.getConfiguration(cometProxy.address)).supplyPerYearInterestRateBase))
-        .to.be.approximately(annualize(await comet.supplyPerSecondInterestRateBase()), 0.00001);
+      const configuratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
 
-      const oldIRBase = (await configuratorAsProxy.getConfiguration(cometProxy.address)).supplyPerYearInterestRateBase.toBigInt();
+      const configExtAsProxy = configExt.attach(configuratorAsProxyConfig.configExt);
+      expect(await configExtAsProxy.supplyPerSecondInterestRateBase()).to.be.equal(await configExt.supplyPerSecondInterestRateBase());
+
+      const oldIRBase = (await configExt.supplyPerSecondInterestRateBase()).toBigInt();
       const newIRBase = exp(5.5, 18);
-      const txn = await wait(configuratorAsProxy.setSupplyPerYearInterestRateBase(cometProxy.address, newIRBase));
+      const { txn, newConfigExt } = await setConfigExt(configuratorAsProxy, cometProxy.address, {
+        supplyInterestRateBase: newIRBase,
+      });
       await wait(proxyAdmin.deployAndUpgradeTo(configuratorProxy.address, cometProxy.address));
 
       expect(event(txn, 0)).to.be.deep.equal({
-        SetSupplyPerYearInterestRateBase: {
+        SetConfigExt: {
           cometProxy: cometProxy.address,
-          oldIRBase,
-          newIRBase,
+          oldConfigExt: configuratorAsProxyConfig.configExt,
+          newConfigExt: newConfigExt.address,
         }
       });
       expect(oldIRBase).to.be.not.equal(newIRBase);
-      expect((await configuratorAsProxy.getConfiguration(cometProxy.address)).supplyPerYearInterestRateBase).to.be.equal(newIRBase);
-      expect(annualize(await cometAsProxy.supplyPerSecondInterestRateBase()))
-        .to.be.approximately(defactor(newIRBase), 0.00001);
+      const newConfiguratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
+      const newConfigExtAsProxy = configExt.attach(newConfiguratorAsProxyConfig.configExt);
+      expect(annualize(await newConfigExtAsProxy.supplyPerSecondInterestRateBase())).to.be.approximately(defactor(newIRBase), 0.00001);
+      const cometAsProxyConfigExtAddress = await cometAsProxy.configExt();
+      const cometAsProxyConfigExt = configExt.attach(cometAsProxyConfigExtAddress);
+      expect(annualize(await cometAsProxyConfigExt.supplyPerSecondInterestRateBase())).to.be.approximately(defactor(newIRBase), 0.00001);
     });
 
     it('sets borrowKink and deploys Comet with new configuration', async () => {
-      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy } = await makeConfigurator();
+      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy, configExt } = await makeConfigurator();
 
       const cometAsProxy = comet.attach(cometProxy.address);
       const configuratorAsProxy = configurator.attach(configuratorProxy.address);
-      expect((await configuratorAsProxy.getConfiguration(cometProxy.address)).borrowKink).to.be.equal(await comet.borrowKink());
+      const configuratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
 
-      const oldKink = (await comet.borrowKink()).toBigInt();
+      const configExtAsProxy = configExt.attach(configuratorAsProxyConfig.configExt);
+      expect(await configExtAsProxy.borrowKink()).to.be.equal(await configExt.borrowKink());
+
+      const oldKink = (await configExt.borrowKink()).toBigInt();
       const newKink = 100n;
-      const txn = await wait(configuratorAsProxy.setBorrowKink(cometProxy.address, newKink));
+      const { txn, newConfigExt } = await setConfigExt(configuratorAsProxy, cometProxy.address, {
+        borrowKink: newKink,
+      });
       await wait(proxyAdmin.deployAndUpgradeTo(configuratorProxy.address, cometProxy.address));
 
       expect(event(txn, 0)).to.be.deep.equal({
-        SetBorrowKink: {
+        SetConfigExt: {
           cometProxy: cometProxy.address,
-          oldKink,
-          newKink,
+          oldConfigExt: configuratorAsProxyConfig.configExt,
+          newConfigExt: newConfigExt.address,
         }
       });
       expect(oldKink).to.be.not.equal(newKink);
-      expect((await configuratorAsProxy.getConfiguration(cometProxy.address)).borrowKink).to.be.equal(newKink);
-      expect(await cometAsProxy.borrowKink()).to.be.equal(newKink);
+      const newConfiguratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
+      const newConfigExtAsProxy = configExt.attach(newConfiguratorAsProxyConfig.configExt);
+      expect(await newConfigExtAsProxy.borrowKink()).to.be.equal(newKink);
+      const cometAsProxyConfigExtAddress = await cometAsProxy.configExt();
+      const cometAsProxyConfigExt = configExt.attach(cometAsProxyConfigExtAddress);
+      expect(await cometAsProxyConfigExt.borrowKink()).to.be.equal(newKink);
     });
 
-    it('sets borrowPerYearInterestRateSlopeLow and deploys Comet with new configuration', async () => {
-      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy } = await makeConfigurator();
+    it('sets borrowPerYearInterestRateSlopeLow and deploys Comet with new configuration', async function() {
+      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy, configExt } = await makeConfigurator();
 
       const cometAsProxy = comet.attach(cometProxy.address);
       const configuratorAsProxy = configurator.attach(configuratorProxy.address);
-      expect(defactor((await configuratorAsProxy.getConfiguration(cometProxy.address)).borrowPerYearInterestRateSlopeLow))
-        .to.be.approximately(annualize(await comet.borrowPerSecondInterestRateSlopeLow()), 0.00001);
+      const configuratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
 
-      const oldIRSlopeLow = (await configuratorAsProxy.getConfiguration(cometProxy.address)).borrowPerYearInterestRateSlopeLow.toBigInt();
+      const configExtAsProxy = configExt.attach(configuratorAsProxyConfig.configExt);
+      expect(await configExtAsProxy.borrowPerSecondInterestRateSlopeLow()).to.be.equal(await configExt.borrowPerSecondInterestRateSlopeLow());
+
+      const oldIRSlopeLow = (await configExt.borrowPerSecondInterestRateSlopeLow()).toBigInt();
       const newIRSlopeLow = exp(5.5, 18);
-      const txn = await wait(configuratorAsProxy.setBorrowPerYearInterestRateSlopeLow(cometProxy.address, newIRSlopeLow));
+      const { txn, newConfigExt } = await setConfigExt(configuratorAsProxy, cometProxy.address, {
+        borrowInterestRateSlopeLow: newIRSlopeLow,
+      });
       await wait(proxyAdmin.deployAndUpgradeTo(configuratorProxy.address, cometProxy.address));
 
       expect(event(txn, 0)).to.be.deep.equal({
-        SetBorrowPerYearInterestRateSlopeLow: {
+        SetConfigExt: {
           cometProxy: cometProxy.address,
-          oldIRSlopeLow,
-          newIRSlopeLow,
+          oldConfigExt: configuratorAsProxyConfig.configExt,
+          newConfigExt: newConfigExt.address,
         }
       });
       expect(oldIRSlopeLow).to.be.not.equal(newIRSlopeLow);
-      expect((await configuratorAsProxy.getConfiguration(cometProxy.address)).borrowPerYearInterestRateSlopeLow).to.be.equal(newIRSlopeLow);
-      expect(annualize(await cometAsProxy.borrowPerSecondInterestRateSlopeLow()))
-        .to.be.approximately(defactor(newIRSlopeLow), 0.00001);
+      const newConfiguratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
+      const newConfigExtAsProxy = configExt.attach(newConfiguratorAsProxyConfig.configExt);
+      expect(annualize(await newConfigExtAsProxy.borrowPerSecondInterestRateSlopeLow())).to.be.approximately(defactor(newIRSlopeLow), 0.00001);
+      const cometAsProxyConfigExtAddress = await cometAsProxy.configExt();
+      const cometAsProxyConfigExt = configExt.attach(cometAsProxyConfigExtAddress);
+      expect(annualize(await cometAsProxyConfigExt.borrowPerSecondInterestRateSlopeLow())).to.be.approximately(defactor(newIRSlopeLow), 0.00001);
     });
 
-    it('sets borrowPerYearInterestRateSlopeHigh and deploys Comet with new configuration', async () => {
-      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy } = await makeConfigurator();
+    it('sets borrowPerYearInterestRateSlopeHigh and deploys Comet with new configuration', async function() {
+      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy, configExt } = await makeConfigurator();
 
       const cometAsProxy = comet.attach(cometProxy.address);
       const configuratorAsProxy = configurator.attach(configuratorProxy.address);
-      expect(defactor((await configuratorAsProxy.getConfiguration(cometProxy.address)).borrowPerYearInterestRateSlopeHigh))
-        .to.be.approximately(annualize(await comet.borrowPerSecondInterestRateSlopeHigh()), 0.00001);
+      const configuratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
 
-      const oldIRSlopeHigh = (await configuratorAsProxy.getConfiguration(cometProxy.address)).borrowPerYearInterestRateSlopeHigh.toBigInt();
+      const configExtAsProxy = configExt.attach(configuratorAsProxyConfig.configExt);
+      expect(await configExtAsProxy.borrowPerSecondInterestRateSlopeHigh()).to.be.equal(await configExt.borrowPerSecondInterestRateSlopeHigh());
+
+      const oldIRSlopeHigh = (await configExt.borrowPerSecondInterestRateSlopeHigh()).toBigInt();
       const newIRSlopeHigh = exp(5.5, 18);
-      const txn = await wait(configuratorAsProxy.setBorrowPerYearInterestRateSlopeHigh(cometProxy.address, newIRSlopeHigh));
+      const { txn, newConfigExt } = await setConfigExt(configuratorAsProxy, cometProxy.address, {
+        borrowInterestRateSlopeHigh: newIRSlopeHigh,
+      });
       await wait(proxyAdmin.deployAndUpgradeTo(configuratorProxy.address, cometProxy.address));
 
       expect(event(txn, 0)).to.be.deep.equal({
-        SetBorrowPerYearInterestRateSlopeHigh: {
+        SetConfigExt: {
           cometProxy: cometProxy.address,
-          oldIRSlopeHigh,
-          newIRSlopeHigh,
+          oldConfigExt: configuratorAsProxyConfig.configExt,
+          newConfigExt: newConfigExt.address,
         }
       });
       expect(oldIRSlopeHigh).to.be.not.equal(newIRSlopeHigh);
-      expect((await configuratorAsProxy.getConfiguration(cometProxy.address)).borrowPerYearInterestRateSlopeHigh).to.be.equal(newIRSlopeHigh);
-      expect(annualize(await cometAsProxy.borrowPerSecondInterestRateSlopeHigh()))
-        .to.be.approximately(defactor(newIRSlopeHigh), 0.00001);
+      const newConfiguratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
+      const newConfigExtAsProxy = configExt.attach(newConfiguratorAsProxyConfig.configExt);
+      expect(annualize(await newConfigExtAsProxy.borrowPerSecondInterestRateSlopeHigh())).to.be.approximately(defactor(newIRSlopeHigh), 0.00001);
+      const cometAsProxyConfigExtAddress = await cometAsProxy.configExt();
+      const cometAsProxyConfigExt = configExt.attach(cometAsProxyConfigExtAddress);
+      expect(annualize(await cometAsProxyConfigExt.borrowPerSecondInterestRateSlopeHigh())).to.be.approximately(defactor(newIRSlopeHigh), 0.00001);
     });
 
-    it('sets borrowPerYearInterestRateBase and deploys Comet with new configuration', async () => {
-      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy } = await makeConfigurator();
+    it('sets borrowPerYearInterestRateBase and deploys Comet with new configuration', async function() {
+      const { configurator, configuratorProxy, proxyAdmin, comet, cometProxy, configExt } = await makeConfigurator();
 
       const cometAsProxy = comet.attach(cometProxy.address);
       const configuratorAsProxy = configurator.attach(configuratorProxy.address);
-      expect(defactor((await configuratorAsProxy.getConfiguration(cometProxy.address)).borrowPerYearInterestRateBase))
-        .to.be.approximately(annualize(await comet.borrowPerSecondInterestRateBase()), 0.00001);
+      const configuratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
 
-      const oldIRBase = (await configuratorAsProxy.getConfiguration(cometProxy.address)).borrowPerYearInterestRateBase.toBigInt();
+      const configExtAsProxy = configExt.attach(configuratorAsProxyConfig.configExt);
+      expect(await configExtAsProxy.borrowPerSecondInterestRateBase()).to.be.equal(await configExt.borrowPerSecondInterestRateBase());
+
+      const oldIRBase = (await configExt.borrowPerSecondInterestRateBase()).toBigInt();
       const newIRBase = exp(5.5, 18);
-      const txn = await wait(configuratorAsProxy.setBorrowPerYearInterestRateBase(cometProxy.address, newIRBase));
+      const { txn, newConfigExt } = await setConfigExt(configuratorAsProxy, cometProxy.address, {
+        borrowInterestRateBase: newIRBase,
+      });
       await wait(proxyAdmin.deployAndUpgradeTo(configuratorProxy.address, cometProxy.address));
 
       expect(event(txn, 0)).to.be.deep.equal({
-        SetBorrowPerYearInterestRateBase: {
+        SetConfigExt: {
           cometProxy: cometProxy.address,
-          oldIRBase,
-          newIRBase,
+          oldConfigExt: configuratorAsProxyConfig.configExt,
+          newConfigExt: newConfigExt.address,
         }
       });
       expect(oldIRBase).to.be.not.equal(newIRBase);
-      expect((await configuratorAsProxy.getConfiguration(cometProxy.address)).borrowPerYearInterestRateBase).to.be.equal(newIRBase);
-      expect(annualize(await cometAsProxy.borrowPerSecondInterestRateBase()))
-        .to.be.approximately(defactor(newIRBase), 0.00001);
+      const newConfiguratorAsProxyConfig = await configuratorAsProxy.getConfiguration(cometProxy.address);
+      const newConfigExtAsProxy = configExt.attach(newConfiguratorAsProxyConfig.configExt);
+      expect(annualize(await newConfigExtAsProxy.borrowPerSecondInterestRateBase())).to.be.approximately(defactor(newIRBase), 0.00001);
+      const cometAsProxyConfigExtAddress = await cometAsProxy.configExt();
+      const cometAsProxyConfigExt = configExt.attach(cometAsProxyConfigExtAddress);
+      expect(annualize(await cometAsProxyConfigExt.borrowPerSecondInterestRateBase())).to.be.approximately(defactor(newIRBase), 0.00001);
     });
 
     it('sets storeFrontPriceFactor and deploys Comet with new configuration', async () => {

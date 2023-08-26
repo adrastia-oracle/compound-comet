@@ -1,4 +1,4 @@
-import { ethers, exp, expect, makeProtocol, ONE } from './helpers';
+import { ethers, exp, expect, makeProtocol, makeProtocolConfigExt, ONE } from './helpers';
 import {
   CometExt__factory,
   CometHarness__factory,
@@ -24,6 +24,17 @@ describe('constructor', function () {
       symbol32: ethers.utils.formatBytes32String('📈BASE')
     });
     await extensionDelegate.deployed();
+
+    const configExt = await makeProtocolConfigExt({
+      supplyKink: exp(8, 17),
+      supplyInterestRateBase: exp(5, 15),
+      supplyInterestRateSlopeLow: exp(1, 17),
+      supplyInterestRateSlopeHigh: exp(3, 18),
+      borrowKink: exp(8, 17),
+      borrowInterestRateBase: exp(5, 15),
+      borrowInterestRateSlopeLow: exp(1, 17),
+      borrowInterestRateSlopeHigh: exp(3, 18),
+    });
 
     // tokens
     const assets = {
@@ -56,16 +67,9 @@ describe('constructor', function () {
       governor: governor.address,
       pauseGuardian: pauseGuardian.address,
       extensionDelegate: extensionDelegate.address,
+      configExt: configExt.address,
       baseToken: tokens['USDC'].address,
       baseTokenPriceFeed: priceFeeds['USDC'].address,
-      supplyKink: exp(8, 17),
-      supplyPerYearInterestRateBase: exp(5, 15),
-      supplyPerYearInterestRateSlopeLow: exp(1, 17),
-      supplyPerYearInterestRateSlopeHigh: exp(3, 18),
-      borrowKink: exp(8, 17),
-      borrowPerYearInterestRateBase: exp(5, 15),
-      borrowPerYearInterestRateSlopeLow: exp(1, 17),
-      borrowPerYearInterestRateSlopeHigh: exp(3, 18),
       storeFrontPriceFactor: exp(1, 18),
       trackingIndexScale: exp(1, 15),
       baseTrackingSupplySpeed: exp(1, 15),
@@ -147,14 +151,14 @@ describe('constructor', function () {
   it('is not possible to create a perSecondInterestRateSlopeLow above FACTOR_SCALE', async () => {
     const uint64Max = BigInt(2 ** 64) - 1n;
 
-    const { comet } = await makeProtocol({
+    const { configExt } = await makeProtocol({
       supplyInterestRateSlopeLow: uint64Max,
       borrowInterestRateSlopeLow: uint64Max
     });
 
     // max value of interestRateSlopeLow should result in a value less than FACTOR_SCALE
-    expect(await comet.supplyPerSecondInterestRateBase()).to.be.lt(exp(1, 18));
-    expect(await comet.borrowPerSecondInterestRateBase()).to.be.lt(exp(1, 18));
+    expect(await configExt.supplyPerSecondInterestRateBase()).to.be.lt(exp(1, 18));
+    expect(await configExt.borrowPerSecondInterestRateBase()).to.be.lt(exp(1, 18));
 
     // exceeding the max value of interestRateSlopeLow should overflow
     await expect(

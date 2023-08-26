@@ -1,5 +1,5 @@
 import hre, { ethers } from 'hardhat';
-import { exp, setTotalsBasic } from '../helpers';
+import { exp, makeProtocolConfigExt, setTotalsBasic } from '../helpers';
 import { HttpNetworkConfig } from 'hardhat/types/config';
 import {
   CometExt__factory,
@@ -58,21 +58,25 @@ export async function makeProtocol() {
   const extensionDelegate = await CometExtFactory.deploy({ name32, symbol32 });
   await extensionDelegate.deployed();
 
+  const configExt = await makeProtocolConfigExt({
+    supplyKink: exp(0.8, 18),
+    supplyInterestRateBase: 0n,
+    supplyInterestRateSlopeLow: exp(0.05, 18),
+    supplyInterestRateSlopeHigh: exp(2, 18),
+    borrowKink: exp(0.8, 18),
+    borrowInterestRateBase: exp(0.005, 18),
+    borrowInterestRateSlopeLow: exp(0.1, 18),
+    borrowInterestRateSlopeHigh: exp(3, 18),
+  });
+
   const CometFactory = (await ethers.getContractFactory('CometHarness')) as CometHarness__factory;
   const config = {
     governor: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
     pauseGuardian: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
     extensionDelegate: extensionDelegate.address,
+    configExt: configExt.address,
     baseToken: USDC,
     baseTokenPriceFeed: USDC_USD_PRICE_FEED,
-    supplyKink: exp(0.8, 18),
-    supplyPerYearInterestRateBase: 0n,
-    supplyPerYearInterestRateSlopeLow: exp(0.05, 18),
-    supplyPerYearInterestRateSlopeHigh: exp(2, 18),
-    borrowKink: exp(0.8, 18),
-    borrowPerYearInterestRateBase: exp(0.005, 18),
-    borrowPerYearInterestRateSlopeLow: exp(0.1, 18),
-    borrowPerYearInterestRateSlopeHigh: exp(3, 18),
     storeFrontPriceFactor: exp(1, 18),
     trackingIndexScale: exp(1, 15),
     baseTrackingSupplySpeed: exp(1, 15),
