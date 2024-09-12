@@ -35,6 +35,8 @@ contract CometConfiguration {
         uint104 targetReserves;
 
         AssetConfig[] assetConfigs;
+
+        PrudentiaConfig supplyCapConfig;
     }
 
     struct AssetConfig {
@@ -45,5 +47,10 @@ contract CometConfiguration {
         uint64 liquidateCollateralFactor;
         uint64 liquidationFactor;
         uint128 supplyCap;
+    }
+
+    struct PrudentiaConfig {
+        address controller; // Adrastia Prudentia controller address
+        uint8 offset; // Offset for delayed rate activation
     }
 }

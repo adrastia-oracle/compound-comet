@@ -38,6 +38,7 @@ contract Configurator is ConfiguratorStorage {
     event UpdateAssetLiquidateCollateralFactor(address indexed cometProxy, address indexed asset, uint64 oldLiquidateCF, uint64 newLiquidateCF);
     event UpdateAssetLiquidationFactor(address indexed cometProxy, address indexed asset, uint64 oldLiquidationFactor, uint64 newLiquidationFactor);
     event UpdateAssetSupplyCap(address indexed cometProxy, address indexed asset, uint128 oldSupplyCap, uint128 newSupplyCap);
+    event UpdateSupplyCapConfig(address indexed cometProxy, PrudentiaConfig oldConfig, PrudentiaConfig newConfig);
 
     /** Custom errors **/
 
@@ -300,6 +301,14 @@ contract Configurator is ConfiguratorStorage {
         uint128 oldSupplyCap = configuratorParams[cometProxy].assetConfigs[assetIndex].supplyCap;
         configuratorParams[cometProxy].assetConfigs[assetIndex].supplyCap = newSupplyCap;
         emit UpdateAssetSupplyCap(cometProxy, asset, oldSupplyCap, newSupplyCap);
+    }
+
+    function updateSupplyCapConfig(address cometProxy, address asset, PrudentiaConfig calldata newConfig) external {
+        if (msg.sender != governor) revert Unauthorized();
+
+        PrudentiaConfig memory oldConfig = configuratorParams[cometProxy].supplyCapConfig;
+        configuratorParams[cometProxy].supplyCapConfig = newConfig;
+        emit UpdateSupplyCapConfig(cometProxy, oldConfig, newConfig);
     }
 
     /** Other helpers **/

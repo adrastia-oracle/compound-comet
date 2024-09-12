@@ -148,4 +148,6 @@ abstract contract CometMainInterface is CometCore {
     function decimals() virtual external view returns (uint8);
 
     function initializeStorage() virtual external;
+
+    function supplyCapConfig() virtual external view returns(PrudentiaConfig memory);
 }
